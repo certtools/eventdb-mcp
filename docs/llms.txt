@@ -1,0 +1,35 @@
+# eventdb-mcp
+
+> MCP server (FastMCP, Python 3.14) giving read-only tools for an IntelMQ eventdb (PostgreSQL), plus a CLI that answers natural-language questions with any OpenAI-compatible LLM.
+
+## Run
+
+- Install: `uv sync`, then `cp env.example .env` and set EVENTDB_DSN, LLM_BASE_URL, LLM_MODEL.
+- Verify: `uv run eventdb-mcp check` (exit code 0 = database and LLM reachable).
+- MCP over stdio: `uv run eventdb-mcp serve`
+- MCP over HTTP: `uv run eventdb-mcp serve --transport http` -> `http://MCP_HOST:MCP_PORT/mcp` (no auth)
+- Ask: `uv run eventdb-mcp ask -v "QUESTION"`
+
+## MCP tools (all read-only)
+
+- `list_tables()` -> tables/views with estimated rows
+- `describe_table(table_name="events")` -> columns, SQL types, IntelMQ descriptions
+- `search_events(source_ip, source_asn, source_fqdn, source_cc, classification_taxonomy, classification_type, classification_identifier, feed_name, malware_name, since, until, limit=50)` -> events, newest first; source_ip accepts CIDR
+- `event_stats(group_by, <same filters>, limit=20)` -> [{value, events}]
+- `run_sql(query)` -> one SELECT/WITH statement; dotted column names must be double-quoted, e.g. "source.ip"
+
+All tools return `{columns, rows, row_count, truncated}`. Errors are MCP tool errors with a readable message.
+
+## Docs
+
+- [Getting started](GETTING_STARTED.md)
+- [User guide](USER_GUIDE.md)
+- [Admin guide](ADMIN_GUIDE.md): configuration, read-only role, security, troubleshooting
+- [Developer guide](DEVELOPER.md): tests, linters, extending
+- [Architecture](ARCHITECTURE.md), [Data flow](DATAFLOW.md)
+- IntelMQ eventdb schema: https://github.com/certtools/intelmq/blob/develop/intelmq/tests/bin/initdb.sql
+
+## Measure success
+
+- `uv run pytest` passes (throwaway PostgreSQL, fake LLM).
+- `eventdb-mcp ask` answers match the SQL logged in `logs/eventdb-mcp.log` when run in psql.
