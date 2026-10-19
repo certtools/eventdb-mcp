@@ -1,0 +1,356 @@
+{
+  "describe_table": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Columns of a table with SQL type and the IntelMQ field description.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "table_name": {
+          "default": "events",
+          "description": "Table or view name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "event_stats": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Count events per value of ``group_by`` (top N), optionally filtered.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "classification_identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. openresolver, mirai, heartbleed"
+        },
+        "classification_taxonomy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. malicious-code, vulnerable, abusive-content"
+        },
+        "classification_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. infected-system, phishing, scanner, ddos"
+        },
+        "feed_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact feed name, see event_stats(group_by='feed.name')"
+        },
+        "group_by": {
+          "description": "Column to group by, e.g. \"source.asn\"",
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "malware_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lowercase malware name, e.g. mirai"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, inclusive lower bound on time.source"
+        },
+        "source_asn": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source autonomous system number, e.g. 64496"
+        },
+        "source_cc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Two-letter source country code, e.g. AT"
+        },
+        "source_fqdn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact source FQDN, e.g. www.example.com"
+        },
+        "source_ip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source IP or CIDR, e.g. 192.0.2.1 or 192.0.2.0/24"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, exclusive upper bound on time.source"
+        }
+      },
+      "required": [
+        "group_by"
+      ],
+      "type": "object"
+    }
+  },
+  "list_tables": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "List tables and views in the eventdb with their estimated number of rows.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  },
+  "run_sql": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Run a read-only SELECT. Double-quote dotted column names; always use LIMIT.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "description": "One read-only SELECT statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  "search_events": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Find events matching ALL given filters, newest first (by time.source).",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "classification_identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. openresolver, mirai, heartbleed"
+        },
+        "classification_taxonomy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. malicious-code, vulnerable, abusive-content"
+        },
+        "classification_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. infected-system, phishing, scanner, ddos"
+        },
+        "feed_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact feed name, see event_stats(group_by='feed.name')"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "malware_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lowercase malware name, e.g. mirai"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, inclusive lower bound on time.source"
+        },
+        "source_asn": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source autonomous system number, e.g. 64496"
+        },
+        "source_cc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Two-letter source country code, e.g. AT"
+        },
+        "source_fqdn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact source FQDN, e.g. www.example.com"
+        },
+        "source_ip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source IP or CIDR, e.g. 192.0.2.1 or 192.0.2.0/24"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, exclusive upper bound on time.source"
+        }
+      },
+      "type": "object"
+    }
+  }
+}

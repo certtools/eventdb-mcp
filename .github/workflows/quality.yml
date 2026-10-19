@@ -2,27 +2,34 @@ name: quality
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # Every commit: lint, unit + integration + e2e tests (stdio, HTTP, ask, check),
+  # contract snapshot, golden answer key vs. reference SQL (1,000 rows), audit.
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - name: PostgreSQL server binaries for the test cluster
+      - name: PostgreSQL server binaries (no Docker; preinstalled on GitHub runners)
         run: |
-          sudo apt-get update && sudo apt-get install -y postgresql
-          echo "$(ls -d /usr/lib/postgresql/*/bin | tail -1)" >> "$GITHUB_PATH"
+          if ! ls -d /usr/lib/postgresql/*/bin >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y postgresql
+          fi
+          ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1 >> "$GITHUB_PATH"
       - run: uv sync --locked --python 3.14
-      - run: uv run ruff format --check src tests
-      - run: uv run ruff check src tests
-      - run: uv run pylint src
+      - run: uv run ruff format --check src tests evals
+      - run: uv run ruff check src tests evals
+      - run: uv run pylint src evals
       - run: uv run pylint tests --disable=missing-function-docstring,redefined-outer-name,too-few-public-methods
-      - run: uv run pytest
+      - run: uv run pytest --durations=5
       - run: uv audit
 
   semgrep:
@@ -30,4 +37,25 @@ jobs:
     container: semgrep/semgrep
     steps:
       - uses: actions/checkout@v4
-      - run: semgrep scan --config p/python --config p/secrets --metrics=off --error src tests
+      - run: semgrep scan --config p/python --config p/secrets --metrics=off --error src tests evals
+
+  # Release only (tags v*) or on demand: 1M-row golden DB, answer key vs. SQL, query timings.
+  benchmark:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: PostgreSQL server binaries
+        run: |
+          if ! ls -d /usr/lib/postgresql/*/bin >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y postgresql
+          fi
+          ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1 >> "$GITHUB_PATH"
+      - run: uv sync --locked --python 3.14
+      - run: uv run python -m evals.run --rows 1000000 --no-llm
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-reports
+          path: logs/evals/

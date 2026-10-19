@@ -26,10 +26,12 @@ All tools return `{columns, rows, row_count, truncated}`. Errors are MCP tool er
 - [User guide](USER_GUIDE.md)
 - [Admin guide](ADMIN_GUIDE.md): configuration, read-only role, security, troubleshooting
 - [Developer guide](DEVELOPER.md): tests, linters, extending
+- [Testing](TESTING.md), [Evals](EVALS.md): what is tested when; golden-question LLM eval and metrics
 - [Architecture](ARCHITECTURE.md), [Data flow](DATAFLOW.md)
 - IntelMQ eventdb schema: https://github.com/certtools/intelmq/blob/develop/intelmq/tests/bin/initdb.sql
 
 ## Measure success
 
-- `uv run pytest` passes (throwaway PostgreSQL, fake LLM).
+- `uv run pytest` passes (throwaway PostgreSQL, fake LLM, e2e subprocesses, contract snapshot).
+- `uv run python -m evals.run` asks 30 golden questions with known answers; read `accuracy` and `safety` in `logs/evals/<run>.json`.
 - `eventdb-mcp ask` answers match the SQL logged in `logs/eventdb-mcp.log` when run in psql.

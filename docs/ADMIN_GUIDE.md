@@ -22,7 +22,9 @@ Update: `git pull && uv sync --locked`.
 ## Configuration
 
 All settings live in `.env` (git-ignored); [`env.example`](../env.example) documents every variable.
-Real environment variables override `.env`. Groups:
+Real environment variables override `.env`. Parsing is strict: a malformed value (e.g.
+`EVENTDB_MAX_ROWS=abc`) or an unknown `EVENTDB_*`/`MCP_*`/`LLM_*` variable stops the program
+with a message naming every problem. Groups:
 
 - `EVENTDB_*`: database connection, table name, timeout, row cap, superuser guard
 - `MCP_*`: FastMCP server transport (`stdio` or `http`), host, port
@@ -86,6 +88,7 @@ proxy that authenticates users. Anyone who reaches it can read the whole eventdb
 
 | Symptom | Cause / fix |
 |---------|-------------|
+| `✗ Invalid configuration: ...` / `Unknown variable(s) in .env` (exit code 2) | A value in `.env` is malformed or out of range, or a variable name has a typo. The message names every offending variable. |
 | `✗ database ... fe_sendauth: no password supplied` | Add the password to `~/.pgpass`, or use the SSH socket forward above. |
 | `Refusing to run queries as a PostgreSQL superuser` | Use a read-only role (above), or knowingly set `EVENTDB_ALLOW_SUPERUSER=true`. |
 | `canceling statement due to statement timeout` | Query too broad: narrow the time range, or raise `EVENTDB_STATEMENT_TIMEOUT_MS`. |

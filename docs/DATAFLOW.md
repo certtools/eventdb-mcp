@@ -11,15 +11,22 @@
    - the call is logged (`tool call: NAME ARGS`),
    - the MCP tool runs → `db.run_query()`:
      1. plain SQL strings pass `check_sql()` (one `SELECT`/`WITH` statement),
-     2. connect with `statement_timeout`, start a `READ ONLY` transaction,
+     2. connect with `statement_timeout` and `TimeZone=UTC`, start a `READ ONLY` transaction,
      3. probe `pg_roles.rolsuper` (takes the snapshot; refuses superusers unless allowed),
      4. log the SQL (`SQL: ... | params=...`), execute, fetch at most `max_rows + 1` rows,
-     5. roll back, convert values (timestamps, inet, ...) to JSON-friendly strings,
+     5. roll back, convert values: jsonb/bool/int/float stay native, numeric aggregates
+        become numbers, timestamps (UTC), inet and enums become strings,
    - the result (or the error text) goes back to the LLM as a `tool` message, cut at
      20 000 characters.
 5. Repeat until the LLM answers without tool calls, or `LLM_MAX_STEPS` is reached
    (then a fixed "No final answer" message is returned instead of failing silently).
 6. The answer is rendered as Markdown on stdout.
+
+## `python -m evals.run` (eval / benchmark)
+
+generate events (seed) → answer key in Python → throwaway PostgreSQL → `COPY` →
+reference SQL must equal the key → (optional) every question through `chat.ask()` →
+grade the `ANSWER:` line → `logs/evals/<run>.{json,md,log}`. See [EVALS.md](EVALS.md).
 
 ## `eventdb-mcp serve`
 

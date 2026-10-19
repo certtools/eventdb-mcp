@@ -7,4 +7,5 @@ MCP server.
 - Daily use: [User guide](USER_GUIDE.md)
 - Operating it: [Admin guide](ADMIN_GUIDE.md)
 - Changing it: [Developer guide](DEVELOPER.md), [Architecture](ARCHITECTURE.md), [Data flow](DATAFLOW.md)
+- Quality: [Testing](TESTING.md), [Evals](EVALS.md)
 - For agents: [llms.txt](llms.txt)

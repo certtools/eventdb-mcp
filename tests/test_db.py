@@ -1,7 +1,5 @@
 """Tests for the SQL guard and the read-only query runner."""
 
-from dataclasses import replace
-
 import pytest
 
 from eventdb_mcp import db
@@ -64,7 +62,7 @@ def test_run_query_not_truncated(settings):
     ],
 )
 def test_read_only_and_timeout_enforced_even_for_superuser(su_settings, query):
-    s = replace(su_settings, allow_superuser=True, statement_timeout_ms=500)
+    s = su_settings.model_copy(update={"allow_superuser": True, "statement_timeout_ms": 500})
     with pytest.raises(db.QueryError, match="Database error"):
         db.run_query(s, query)
     assert db.run_query(s, "SELECT count(*) AS n FROM events")["rows"] == [{"n": 9}]

@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- New: golden-question LLM eval (`python -m evals.run`): deterministic synthetic eventdb
+  (1,000 rows by default, 1,000,000 for the benchmark), 30 questions with answers computed
+  in Python and verified against reference SQL, grading via `ANSWER:` line; metrics:
+  accuracy per category/kind, set precision/recall/F1 (macro/micro), yes/no confusion
+  matrix, numeric error, tool usage, latency, safety (write attempts, prompt-injection
+  canary), pass@k / pass^k. Reports in `logs/evals/`.
+- New: end-to-end tests that run `serve` (stdio and HTTP), `ask` and `check` in
+  subprocesses (fake OpenAI-compatible server for the LLM); contract snapshot of the MCP
+  tools; tests for every column type (jsonb, real, boolean, inet v4/v6, timestamptz, enum).
+- Changed: strict `.env` parsing (pydantic): malformed or out-of-range values and unknown
+  `EVENTDB_*`/`MCP_*`/`LLM_*` variables stop the CLI with one clear message (exit code 2).
+- Fix: numeric aggregates (`avg()`, `sum()`) are returned as numbers, not strings.
+- Fix: timestamps are always UTC (DB session pinned to `TimeZone=UTC`); they used to follow
+  the server's local time zone.
+- Tests: throwaway PostgreSQL clusters get unique directories (concurrent runs no longer
+  delete each other's database); coverage now includes branches and `evals/`, minimum 95%.
+- CI: uses the PostgreSQL binaries preinstalled on GitHub runners (no Docker); lint covers
+  `evals/`; new release-only benchmark job (tags `v*` or manual).
+- Docs: `docs/TESTING.md`, `docs/EVALS.md`; developer, admin, architecture, data-flow guides
+  updated.
+
 ## 0.1.0 - 2026-10-19
 
 - New: FastMCP server for the IntelMQ eventdb with read-only tools `list_tables`,

@@ -38,6 +38,7 @@ uv run eventdb-mcp ask -v "Top 10 ASNs with infected systems last week?"
 | use it day to day, write good questions | [docs/USER_GUIDE.md](docs/USER_GUIDE.md)   |
 | install, secure and operate it      | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md)     |
 | change or extend the code           | [docs/DEVELOPER.md](docs/DEVELOPER.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATAFLOW.md](docs/DATAFLOW.md) |
+| see how it is tested and evaluated  | [docs/TESTING.md](docs/TESTING.md), [docs/EVALS.md](docs/EVALS.md) |
 | integrate it from an agent          | [docs/llms.txt](docs/llms.txt)                 |
 
 Changes: [CHANGELOG.md](CHANGELOG.md).
