@@ -12,7 +12,13 @@ uv run python -m evals.run --repeats 3             # consistency: pass@k and pas
 uv run python -m evals.run --questions q06,q30     # a subset
 uv run python -m evals.run --no-llm                # only build the DB and verify the answer key
 uv run python -m evals.run --rows 1000000 --no-llm # release benchmark
+uv run python -m evals.export --rows 1000 --out tmp/golden   # golden.sql + answers.json
 ```
+
+`evals.export` writes the golden eventdb as `golden.sql` (IntelMQ schema + `COPY` data; load
+it with `psql -f`, or mount the directory at `/docker-entrypoint-initdb.d` of the postgres
+image) and `answers.json` (every question's prompt and expected answer). chat-ui uses it for
+its Docker test stack.
 
 Only `LLM_*` settings are taken from `.env`. The database is always a throwaway cluster,
 never `EVENTDB_DSN`.

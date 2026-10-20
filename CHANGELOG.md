@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- New: `python -m evals.export --rows N --out DIR` writes the golden eventdb as `golden.sql`
+  (schema + COPY data, loadable by plain psql or the postgres image's init directory) and
+  `answers.json` (prompts + expected answers). Used by chat-ui's Docker test stack. Tested by
+  loading the export into a throwaway cluster and checking all 30 reference queries.
+
 - New: golden-question LLM eval (`python -m evals.run`): deterministic synthetic eventdb
   (1,000 rows by default, 1,000,000 for the benchmark), 30 questions with answers computed
   in Python and verified against reference SQL, grading via `ANSWER:` line; metrics:

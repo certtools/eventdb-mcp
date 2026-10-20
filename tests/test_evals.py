@@ -11,7 +11,7 @@ from datetime import date
 import pytest
 from click.testing import CliRunner
 
-from evals import dataset, run
+from evals import dataset, export, run
 from evals.grading import Grade, Record, answer_line, grade, is_write_sql, prf, summarize
 from evals.questions import BY_ID, QUESTIONS, AmbiguousError, answer_key, top
 
@@ -262,3 +262,35 @@ def test_runner_aborts_when_database_disappears(tmp_path, monkeypatch):
 def test_clusters_get_unique_directories():
     with run.pgtmp.cluster("unique-test") as first, run.pgtmp.cluster("unique-test") as second:
         assert first != second
+
+
+# --- export ------------------------------------------------------------------------------
+
+
+def test_copy_value_escapes_like_postgres():
+    from evals.export import copy_value  # pylint: disable=import-outside-toplevel
+
+    assert copy_value(None) == "\\N"
+    assert (copy_value(True), copy_value(False)) == ("t", "f")
+    assert copy_value("a\tb\nc\\d\r") == "a\\tb\\nc\\\\d\\r"
+    assert copy_value({"note": "ü"}) == '{"note": "ü"}'
+    assert copy_value(date(2026, 1, 5)) == "2026-01-05"
+
+
+def test_export_loads_into_postgres_and_matches_the_answer_key(pg_base, settings, tmp_path):
+    """golden.sql loads with plain psql; every reference query then matches answers.json."""
+    result = CliRunner().invoke(export.main, ["--rows", "1000", "--out", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    run.pgtmp.run("psql", pg_base.format(user="postgres") + "/postgres", "-c", "CREATE DATABASE exported")
+    su_dsn = pg_base.format(user="postgres") + "/exported"
+    run.pgtmp.run("psql", su_dsn, "-v", "ON_ERROR_STOP=1", "-f", str(tmp_path / "golden.sql"))
+    run.pgtmp.run("psql", su_dsn, "-c", "GRANT SELECT ON ALL TABLES IN SCHEMA public TO eventdb_ro")
+    ro_dsn = pg_base.format(user="eventdb_ro") + "/exported"
+    results = run.verify(settings.model_copy(update={"db_dsn": ro_dsn}), answer_key(dataset.generate(1000)))
+    assert [r["qid"] for r in results if not r["ok"]] == []
+
+    exported = json.loads((tmp_path / "answers.json").read_text())
+    assert (exported["rows"], len(exported["questions"])) == (1000, 30)
+    by_id = {q["id"]: q for q in exported["questions"]}
+    assert by_id["q01"]["expected"] == 1000 and by_id["q19"]["expected"] == "2026-01-05"
+    assert by_id["q30"]["prompt"].endswith("'ANSWER: <value>' where <value> is a single integer.")
