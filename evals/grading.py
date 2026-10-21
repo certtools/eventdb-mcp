@@ -166,10 +166,11 @@ def _bool_metrics(records: list[Record]) -> dict:
         matrix["yes" if r.expected else "no"][said] += 1
     tp, fn = matrix["yes"]["yes"], matrix["yes"]["no"] + matrix["yes"]["unparseable"]
     fp, tn = matrix["no"]["yes"], matrix["no"]["no"]
+    negatives = sum(matrix["no"].values())  # 0 for a positive-only subset, e.g. --questions q24
     return {
         "confusion_matrix": matrix,
         **prf(tp, fp, fn),
-        "specificity": tn / (tn + fp + matrix["no"]["unparseable"]) if records else 0.0,
+        "specificity": tn / negatives if negatives else 0.0,
     }
 
 
@@ -181,8 +182,10 @@ def _set_metrics(records: list[Record]) -> dict:
     macro = {
         k: statistics.fmean(m[k] for m in per_q) if per_q else 0.0 for k in ("precision", "recall", "f1")
     }
-    totals = [sum(getattr(r.grade, a) for r in records) for a in ("tp", "fp", "fn")]
-    return {"macro": macro, "micro": prf(*totals)}
+    tp, fp, fn = (sum(getattr(r.grade, a) for r in records) for a in ("tp", "fp", "fn"))
+    # An unparseable or failed answer found none of the expected items.
+    fn += sum(len(r.expected) for r in records if r.grade.outcome not in ("correct", "wrong"))
+    return {"macro": macro, "micro": prf(tp, fp, fn)}
 
 
 def _numeric_metrics(records: list[Record]) -> dict:

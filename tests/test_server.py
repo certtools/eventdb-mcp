@@ -133,8 +133,15 @@ def test_chart_defaults_to_30_days_up_to_the_latest_event(settings):
     result = call(settings, "chart").structured_content
     [line] = result["chart"]["series"]
     assert (line["name"], line["total"]) == ("all", 8)  # 9 events, one is 40 days old
-    assert result["chart"]["x"]["step"] == "day"
-    assert result["chart"]["x"]["count"] == 30
+    # One line: the point budget is for one series, so 30 days fit hourly (720 buckets).
+    assert result["chart"]["x"]["step"] == "hour"
+    assert result["chart"]["x"]["count"] == 720
+
+
+def test_chart_without_group_by_fits_a_year_of_days(settings):
+    spec = call(settings, "chart", since=ago(365), until=ago(0)).structured_content["chart"]
+    assert spec["x"]["step"] == "day" and spec["x"]["count"] in (365, 366)
+    assert [(s["name"], s["total"]) for s in spec["series"]] == [("all", 9)]
 
 
 def test_chart_filters_and_series_limit(settings):
@@ -178,7 +185,7 @@ def test_chart_sends_exact_sql_and_parameters(settings, monkeypatch):
         ).as_string()
     )
     start, end = datetime(2026, 3, 1, 12, tzinfo=UTC), datetime(2026, 3, 4, tzinfo=UTC)
-    assert params == [timedelta(hours=1), start, "Scanners", start, end, 6]
+    assert params == [3600, 3600, "Scanners", start, end, 6]
     assert max_rows == charts.MAX_POINTS
     # Hourly buckets from 12:00: 2026-03-02 00:00 is bucket 12, the others are 0.
     assert result["chart"]["series"][0]["values"][11:13] == [0, 4]
@@ -194,6 +201,8 @@ def test_chart_refusals(settings):
         ({"since": ago(-2)}, "No events since"),
         ({"since": ago(30), "bucket": "10min"}, "Too many points"),
         ({"feed_name": "No such feed"}, "No events match"),
+        ({"since": "2001-01-01", "until": "2001-01-02"}, "No events match"),  # explicit, empty window
+        ({"since": ago(0.02)}, "No events"),  # after the latest event (1 hour ago), same day
     ]
     for args, message in cases:
         result = call(settings, "chart", **args)

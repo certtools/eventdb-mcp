@@ -25,7 +25,7 @@
 | `config.py` | `Settings` (pydantic, strict), read from environment and `.env`. Single source of all knobs. |
 | `db.py` | `check_sql()` (single SELECT/WITH only) and `run_query()` (read-only transaction, timeout, superuser guard, row cap, JSON-friendly rows). |
 | `server.py` | `create_server(settings)` builds the FastMCP server with the tools. Structured queries are composed with `psycopg.sql` (identifiers quoted, values as parameters). |
-| `charts.py` | The `chart` tool's parts: group_by whitelist, time axis and bucket choice (at most 1,000 points), the ranking SQL (`date_bin`, `dense_rank`), dense series with zeros for empty buckets. |
+| `charts.py` | The `chart` tool's parts: group_by whitelist, time axis and bucket choice (at most 1,000 points), the ranking SQL (buckets as `floor(epoch / step)`, which PostgreSQL 13 can do; `dense_rank`), dense series with zeros for empty buckets. |
 | `chat.py` | `ask()`: OpenAI-compatible tool-calling loop against the MCP server. |
 | `cli.py` | `click` commands `serve`, `ask`, `check`; sets up the audit log. |
 | `__main__.py` | `python -m eventdb_mcp` (used by the end-to-end tests). |

@@ -288,11 +288,14 @@ def create_server(settings: Settings) -> FastMCP:
         filters = {k: v for k, v in locals().items() if k in FILTERS and k not in ("since", "until")}
         charts.line_sql(table, group_by, sql.SQL(""))  # refuse a bad group_by before any query
         used = chart_window(since, until, filters)
-        bucket, labels = charts.pick_bucket(used["start"], used["end"], bucket, series)
+        lines = series if group_by else 1  # without group_by there is one "all" line
+        bucket, labels = charts.pick_bucket(used["start"], used["end"], bucket, lines)
         where, params = build_where(filters | {"since": used["start"], "until": used["end"]})
-        origin = charts.floor(used["start"], bucket)
+        seconds = int(charts.BUCKETS[bucket].total_seconds())
         query = charts.line_sql(table, group_by, where)
-        rows = run(query, [charts.BUCKETS[bucket], origin, *params, series], max_rows=charts.MAX_POINTS)
+        rows = run(query, [seconds, seconds, *params, series], max_rows=charts.MAX_POINTS)
+        if not rows["rows"]:
+            raise ToolError(f"No events match these filters between {used['start']} and {used['end']}.")
         shown = ", ".join(f"{FILTERS[k][0]}={v}" for k, v in filters.items() if v is not None)
         default_title = (
             f"Events per {bucket}{f' by {group_by}' if group_by else ''}{f' ({shown})' if shown else ''}"

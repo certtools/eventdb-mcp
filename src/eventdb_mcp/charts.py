@@ -8,7 +8,8 @@ docs/DEVELOPER.md "Charts")::
 
 The numbers always come from PostgreSQL, never from the LLM: the SQL is built from
 whitelisted identifiers (:data:`COLUMNS`) and ``%s`` parameters. Buckets are UTC (the
-session time zone, see db.py) and labelled ``YYYY-MM-DD HH:MM``. The x axis is
+session time zone, see db.py), aligned to the Unix epoch (no ``date_bin``: that needs
+PostgreSQL 14) and labelled ``YYYY-MM-DD HH:MM``. The x axis is
 ``{start, step, count}``; buckets without events are filled with 0 here, not in SQL.
 """
 
@@ -23,7 +24,7 @@ DEFAULT_DAYS = 30  # window when since is left out
 LABEL_FORMAT = "%Y-%m-%d %H:%M"
 BUCKETS = {"10min": timedelta(minutes=10), "hour": timedelta(hours=1), "day": timedelta(days=1)}
 AUTO_BUCKETS = ("hour", "day")  # 10min only when asked for: feeds rarely report that finely
-EPOCH = datetime(2000, 1, 1, tzinfo=UTC)  # buckets are aligned to UTC midnight
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)  # buckets are aligned like the SQL: floor(epoch / step)
 
 # Columns a chart may group by: categorical, low-cardinality IntelMQ fields.
 COLUMNS = (
@@ -80,7 +81,7 @@ def pick_bucket(start: datetime, end: datetime, bucket: str | None, series: int)
 def line_sql(table: sql.Identifier, column: str | None, where: sql.Composable) -> sql.Composed:
     """Events per (value, bucket) for the top ``%s`` values of ``column`` (None = one line "all").
 
-    Parameters, in order: bucket interval, bucket origin, the ``where`` parameters, series.
+    Parameters, in order: bucket seconds (twice), the ``where`` parameters, series.
     """
     if column is not None and column not in COLUMNS:
         raise ToolError(f"group_by must be one of {', '.join(COLUMNS)} (or left out for one line).")
@@ -90,7 +91,8 @@ def line_sql(table: sql.Identifier, column: str | None, where: sql.Composable) -
             "SELECT value, t, events, total FROM ("
             "SELECT value, t, events, total, dense_rank() OVER (ORDER BY total DESC, value) AS rank FROM ("
             "SELECT {value} AS value,"
-            " to_char(date_bin(%s, \"time.source\", %s), 'YYYY-MM-DD HH24:MI') AS t,"
+            ' to_char(to_timestamp(floor(extract(epoch FROM "time.source") / %s) * %s),'
+            " 'YYYY-MM-DD HH24:MI') AS t,"
             " count(*) AS events, sum(count(*)) OVER (PARTITION BY {value}) AS total FROM {table}"
         ).format(value=value, table=table)
         + where

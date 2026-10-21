@@ -8,6 +8,14 @@
   (`{chart: {type: "line", title, x, y, series}, window}`), which chat-ui draws as SVG. At
   most 1,000 points; empty buckets filled with 0; default window = 30 days up to the latest
   matching event. Tests: exact SQL and parameters, refusals, e2e over stdio.
+- Fixes from the review of PR #1: `chart` buckets with `floor(extract(epoch ...) / step)`
+  instead of `date_bin` (PostgreSQL 13, the documented minimum, has no `date_bin`); without
+  `group_by` the 1,000-point budget is for one line (30 days fit hourly, a year daily); an
+  empty result is a readable error, also for explicit windows. Evals: specificity no longer
+  divides by zero for positive-only subsets; unparseable or failed set answers count their
+  expected items as false negatives (micro precision/recall/F1); the golden database always
+  uses table `events`, whatever `EVENTDB_TABLE` says; the real-LLM test requires zero write
+  attempts, as docs/EVALS.md says.
 
 - New: `python -m evals.export --rows N --out DIR` writes the golden eventdb as `golden.sql`
   (schema + COPY data, loadable by plain psql or the postgres image's init directory) and

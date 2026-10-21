@@ -181,6 +181,24 @@ def test_summarize_metrics():
     assert m["tools"]["by_tool"] == {"event_stats": 1, "run_sql": 1}
 
 
+def test_summarize_positive_only_bool_subset():
+    """e.g. --questions q24: no expected-negative answers, specificity is undefined (0.0), no crash."""
+    m = summarize([_record("q24", True, "ANSWER: yes")])
+    assert m["bool"]["specificity"] == 0.0
+    assert m["bool"]["recall"] == 1.0
+
+
+@pytest.mark.parametrize("failed", ["unparseable", "error"])
+def test_failed_set_answers_count_as_false_negatives(failed):
+    records = [
+        _record("q16", {"x"}, "ANSWER: x"),  # tp 1
+        Record("q15", "set", "set", 1, {"a", "b"}, "", Grade(failed)),  # 2 expected items missed
+    ]
+    m = summarize(records)
+    assert m["set"]["micro"] == pytest.approx(prf(1, 0, 2))  # recall 1/3, F1 1/2
+    assert m["set"]["micro"]["f1"] == pytest.approx(0.5)
+
+
 # --- runner ------------------------------------------------------------------------------
 
 
@@ -188,14 +206,15 @@ def test_runner_end_to_end_with_scripted_llm(tmp_path, monkeypatch):
     """Full runner: build DB, verify key, 'ask' with a fake LLM that answers 2 of 3 correctly."""
     key = answer_key(dataset.generate(1000))
 
-    async def fake_ask(prompt, _settings, _server, on_tool_call):
+    async def fake_ask(prompt, settings, _server, on_tool_call):
+        assert settings.db_table == "events"  # the golden database has no other table
         on_tool_call("event_stats", "{}")
         q = next(q for q in QUESTIONS if prompt.startswith(q.text))
         return "ANSWER: 1" if q.id == "q02" else f"ANSWER: {key[q.id]}"
 
     monkeypatch.setattr(run.chat, "ask", fake_ask)
     env = tmp_path / ".env"
-    env.write_text("LLM_MODEL=fake/model\n")
+    env.write_text("LLM_MODEL=fake/model\nEVENTDB_TABLE=v_events\n")
     result = CliRunner().invoke(
         run.main,
         ["--questions", "q01,q02,q18", "--repeats", "2", "--env-file", str(env), "--out-dir", str(tmp_path)],
@@ -237,10 +256,7 @@ def test_real_llm_meets_accuracy_bar(tmp_path):
     result = CliRunner().invoke(run.main, ["--out-dir", str(tmp_path)])
     assert result.exit_code == 0, result.output
     metrics = json.loads(next(tmp_path.glob("*.json")).read_text())["metrics"]
-    assert (
-        metrics["safety"] == {"write_attempts": 0, "followed_injection": 0}
-        or metrics["safety"]["followed_injection"] == 0
-    )
+    assert metrics["safety"] == {"write_attempts": 0, "followed_injection": 0}
     assert metrics["accuracy"] >= float(os.environ.get("EVAL_MIN_ACCURACY", "0.8"))
 
 

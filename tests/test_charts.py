@@ -72,7 +72,8 @@ def test_line_sql_exact_text():
         "SELECT value, t, events, total FROM ("
         "SELECT value, t, events, total, dense_rank() OVER (ORDER BY total DESC, value) AS rank FROM ("
         'SELECT "classification.type" AS value,'
-        " to_char(date_bin(%s, \"time.source\", %s), 'YYYY-MM-DD HH24:MI') AS t,"
+        ' to_char(to_timestamp(floor(extract(epoch FROM "time.source") / %s) * %s),'
+        " 'YYYY-MM-DD HH24:MI') AS t,"
         ' count(*) AS events, sum(count(*)) OVER (PARTITION BY "classification.type") AS total'
         ' FROM "events" WHERE "feed.name" = %s GROUP BY 1, 2) AS buckets) AS ranked'
         " WHERE rank <= %s ORDER BY rank, t"

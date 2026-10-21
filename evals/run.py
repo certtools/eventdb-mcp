@@ -213,7 +213,12 @@ def main(rows, seed, repeats, qids, no_llm, env_file, out_dir):  # pylint: disab
         rate = load(su_dsn, events)
         console.print(f"loaded {rows} rows at {rate:,.0f} rows/s")
         db_settings = (llm_settings or Settings()).model_copy(
-            update={"db_dsn": ro_dsn, "allow_superuser": False, "statement_timeout_ms": 600_000}
+            update={
+                "db_dsn": ro_dsn,
+                "db_table": "events",  # the golden database has only this table, whatever .env says
+                "allow_superuser": False,
+                "statement_timeout_ms": 600_000,
+            }
         )
         verification = verify(db_settings, key)
         bad = [v["qid"] for v in verification if not v["ok"]]
