@@ -1,4 +1,206 @@
 {
+  "chart": {
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "description": "Data for a line chart that the user's UI draws: events per time bucket (time.source, UTC).\n\nUse it when the user asks for a plot, chart, graph, trend, timeline, or \"over time\" /\n\"per hour\" / \"per day\". One line per top value of group_by (most events first), or one\n\"all\" line. Without since/until: the 30 days up to the latest matching event. At most\n1,000 points (series x buckets). Each line has total, peak and peak_at: describe the\nchart in 2-3 sentences from those, do not read or list the values.",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bucket": {
+          "anyOf": [
+            {
+              "enum": [
+                "10min",
+                "hour",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time bucket (UTC); leave out for hour, or day when hours do not fit"
+        },
+        "classification_identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. openresolver, mirai, heartbleed"
+        },
+        "classification_taxonomy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. malicious-code, vulnerable, abusive-content"
+        },
+        "classification_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. infected-system, phishing, scanner, ddos"
+        },
+        "feed_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact feed name, see event_stats(group_by='feed.name')"
+        },
+        "group_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One line per top value of this column: feed.name, classification.taxonomy, classification.type, classification.identifier, malware.name, source.asn, source.geolocation.cc, ... (see the error for the full list); leave out for one total line"
+        },
+        "malware_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lowercase malware name, e.g. mirai"
+        },
+        "series": {
+          "default": 6,
+          "description": "Number of lines (top values)",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, inclusive lower bound on time.source"
+        },
+        "source_asn": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source autonomous system number, e.g. 64496"
+        },
+        "source_cc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Two-letter source country code, e.g. AT"
+        },
+        "source_fqdn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact source FQDN, e.g. www.example.com"
+        },
+        "source_ip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source IP or CIDR, e.g. 192.0.2.1 or 192.0.2.0/24"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Chart title; default: built"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO timestamp, exclusive upper bound on time.source"
+        },
+        "y_scale": {
+          "default": "linear",
+          "description": "'log' when the lines differ by orders of magnitude",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
   "describe_table": {
     "annotations": {
       "readOnlyHint": true

@@ -76,12 +76,14 @@ def test_stdio_server_as_started_by_an_mcp_client(env_file):
             tools = {t.name for t in await client.list_tools()}
             stats = await client.call_tool("event_stats", {"group_by": "source.geolocation.cc", "limit": 1})
             write = await client.call_tool("run_sql", {"query": "DELETE FROM events"}, raise_on_error=False)
-            return tools, stats.structured_content["rows"], write
+            plot = await client.call_tool("chart", {"group_by": "source.geolocation.cc", "series": 1})
+            return tools, stats.structured_content["rows"], write, plot.structured_content["chart"]
 
-    tools, rows, write = asyncio.run(session())
-    assert tools == {"list_tables", "describe_table", "search_events", "event_stats", "run_sql"}
+    tools, rows, write, chart = asyncio.run(session())
+    assert tools == {"list_tables", "describe_table", "search_events", "event_stats", "chart", "run_sql"}
     assert rows == [{"value": "AT", "events": 5}]
     assert write.is_error
+    assert [(s["name"], s["total"]) for s in chart["series"]] == [("AT", 5)]
 
 
 def _wait_for_port(port: int, proc: subprocess.Popen, timeout: float = 30) -> None:

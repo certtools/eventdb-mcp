@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New: read-only tool `chart`: events per hour or day (time.source, UTC), one line per top
+  value of a whitelisted column (feed, classification, malware, ASN, country, ...), same
+  filters as `search_events`. Returns the chart spec of clickhouse-mcp's `chart`
+  (`{chart: {type: "line", title, x, y, series}, window}`), which chat-ui draws as SVG. At
+  most 1,000 points; empty buckets filled with 0; default window = 30 days up to the latest
+  matching event. Tests: exact SQL and parameters, refusals, e2e over stdio.
+
 - New: `python -m evals.export --rows N --out DIR` writes the golden eventdb as `golden.sql`
   (schema + COPY data, loadable by plain psql or the postgres image's init directory) and
   `answers.json` (prompts + expected answers). Used by chat-ui's Docker test stack. Tested by

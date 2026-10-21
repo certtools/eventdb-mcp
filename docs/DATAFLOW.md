@@ -33,6 +33,12 @@ grade the `ANSWER:` line → `logs/evals/<run>.{json,md,log}`. See [EVALS.md](EV
 MCP client → (stdio or HTTP `/mcp`) → FastMCP tool → `db.run_query()` (steps 4.1–4.5 above)
 → JSON result `{columns, rows, row_count, truncated}` → MCP client.
 
+`chart`: arguments → `charts.line_sql()` (whitelisted column, values as parameters) →
+optional `max("time.source")` lookup for the default window → `db.run_query()` (one row per
+value and bucket, top `series` values only) → `charts.line_series()` fills empty buckets
+with 0 → `{chart, window}` → MCP client (chat-ui draws `chart` as SVG; the LLM reads totals
+and peaks).
+
 ## What leaves the machine
 
 | Data | Goes to |

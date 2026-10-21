@@ -16,9 +16,10 @@
 - `describe_table(table_name="events")` -> columns, SQL types, IntelMQ descriptions
 - `search_events(source_ip, source_asn, source_fqdn, source_cc, classification_taxonomy, classification_type, classification_identifier, feed_name, malware_name, since, until, limit=50)` -> events, newest first; source_ip accepts CIDR
 - `event_stats(group_by, <same filters>, limit=20)` -> [{value, events}]
+- `chart(group_by=None, bucket=None|"10min"|"hour"|"day", series=6, y_scale="linear"|"log", title=None, <same filters>)` -> {chart, window}. chart = {type: "line", title, x: {label, start: "YYYY-MM-DD HH:MM" (UTC), step, count}, y: {label, scale}, series: [{name, total, peak, peak_at, values}]}: events per bucket of time.source, one series per top value of group_by (feed.name, feed.provider, feed.code, classification.taxonomy, classification.type, classification.identifier, malware.name, source.asn, source.as_name, source.geolocation.cc, protocol.application, protocol.transport, destination.port, severity, tlp; none = one "all" series; NULL = "(none)"); missing buckets are 0. At most 1,000 points (series x buckets); bucket None = hour if it fits, else day. Without until: the day after the latest matching event; without since: 30 days before until. window = {since, until, time_zone: "UTC"[, note]}. Same spec as clickhouse-mcp `chart` (line); chat-ui draws it.
 - `run_sql(query)` -> one SELECT/WITH statement; dotted column names must be double-quoted, e.g. "source.ip"
 
-All tools return `{columns, rows, row_count, truncated}`. Errors are MCP tool errors with a readable message.
+All tools except `chart` return `{columns, rows, row_count, truncated}`. Errors are MCP tool errors with a readable message.
 
 ## Docs
 

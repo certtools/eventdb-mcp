@@ -2,10 +2,11 @@
 
 import asyncio
 import re
+from datetime import UTC, datetime, timedelta
 
 from fastmcp import Client
 
-from eventdb_mcp import server
+from eventdb_mcp import charts, server
 from tests.conftest import FIXTURES
 
 
@@ -45,6 +46,7 @@ def test_tools_listed(settings):
         "describe_table",
         "search_events",
         "event_stats",
+        "chart",
         "run_sql",
     }
 
@@ -100,3 +102,100 @@ def test_run_sql_rejects_writes(settings):
     result = call(settings, "run_sql", query="DELETE FROM events")
     assert result.is_error
     assert "Only SELECT" in result.content[0].text
+
+
+def ago(days: float) -> str:
+    """ISO timestamp ``days`` before now (the sample events are relative to now())."""
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat()
+
+
+def test_chart_lines_per_top_value(settings):
+    result = call(settings, "chart", group_by="classification.type", since=ago(14), bucket="day")
+    spec = result.structured_content["chart"]
+    assert spec["type"] == "line"
+    assert spec["title"] == "Events per day by classification.type"
+    assert spec["x"]["step"] == "day"
+    assert spec["x"]["label"] == "Time (UTC), per day"
+    assert spec["y"] == {"label": "events per day", "scale": "linear"}
+    names = [(s["name"], s["total"]) for s in spec["series"]]
+    # Ties (2 events) are ordered by name; the scanner event 40 days ago is outside the window.
+    assert names == [("infected-system", 3), ("phishing", 2), ("vulnerable-system", 2), ("scanner", 1)]
+    for line in spec["series"]:
+        assert len(line["values"]) == spec["x"]["count"]
+        assert sum(line["values"]) == line["total"]
+        assert line["peak"] == max(line["values"])
+    window = result.structured_content["window"]
+    assert window["time_zone"] == "UTC"
+    assert "latest matching event" in window["note"]
+
+
+def test_chart_defaults_to_30_days_up_to_the_latest_event(settings):
+    result = call(settings, "chart").structured_content
+    [line] = result["chart"]["series"]
+    assert (line["name"], line["total"]) == ("all", 8)  # 9 events, one is 40 days old
+    assert result["chart"]["x"]["step"] == "day"
+    assert result["chart"]["x"]["count"] == 30
+
+
+def test_chart_filters_and_series_limit(settings):
+    spec = call(settings, "chart", feed_name="Scanners", since=ago(60), until=ago(0)).structured_content
+    assert [(s["name"], s["total"]) for s in spec["chart"]["series"]] == [("all", 2)]
+    assert "note" not in spec["window"]
+    spec = call(settings, "chart", group_by="source.geolocation.cc", series=1, since=ago(60))
+    assert [(s["name"], s["total"]) for s in spec.structured_content["chart"]["series"]] == [("AT", 5)]
+
+
+def test_chart_title_and_log_scale(settings):
+    spec = call(settings, "chart", title="Ports &lt;1024", y_scale="log").structured_content["chart"]
+    assert spec["title"] == "Ports <1024"
+    assert spec["y"]["scale"] == "log"
+
+
+def test_chart_sends_exact_sql_and_parameters(settings, monkeypatch):
+    seen = []
+
+    def fake_run_query(_settings, query, params=None, max_rows=None):
+        seen.append((query, params, max_rows))
+        return {"rows": [{"value": "x", "t": "2026-03-02 00:00", "events": 4, "total": 4}]}
+
+    monkeypatch.setattr(server.db, "run_query", fake_run_query)
+    result = call(
+        settings,
+        "chart",
+        group_by="feed.name",
+        feed_name="Scanners",
+        since="2026-03-01T12:00",
+        until="2026-03-04",
+    ).structured_content
+    assert len(seen) == 1  # since and until given: no lookup of the latest event
+    query, params, max_rows = seen[0]
+    assert (
+        query.as_string()
+        == charts.line_sql(
+            server.sql.Identifier("events"),
+            "feed.name",
+            server.sql.SQL(' WHERE "feed.name" = %s AND "time.source" >= %s AND "time.source" < %s'),
+        ).as_string()
+    )
+    start, end = datetime(2026, 3, 1, 12, tzinfo=UTC), datetime(2026, 3, 4, tzinfo=UTC)
+    assert params == [timedelta(hours=1), start, "Scanners", start, end, 6]
+    assert max_rows == charts.MAX_POINTS
+    # Hourly buckets from 12:00: 2026-03-02 00:00 is bucket 12, the others are 0.
+    assert result["chart"]["series"][0]["values"][11:13] == [0, 4]
+    assert result["window"] == {"since": start.isoformat(), "until": end.isoformat(), "time_zone": "UTC"}
+
+
+def test_chart_refusals(settings):
+    cases = [
+        ({"group_by": '"; DROP TABLE events; --'}, "group_by must be one of"),
+        ({"group_by": "raw"}, "group_by must be one of"),
+        ({"since": "2026-03-02", "until": "2026-03-01"}, "since must be before until"),
+        ({"since": "yesterday"}, "since: not an ISO date"),
+        ({"since": ago(-2)}, "No events since"),
+        ({"since": ago(30), "bucket": "10min"}, "Too many points"),
+        ({"feed_name": "No such feed"}, "No events match"),
+    ]
+    for args, message in cases:
+        result = call(settings, "chart", **args)
+        assert result.is_error, args
+        assert message in result.content[0].text, (args, result.content[0].text)

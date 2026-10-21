@@ -56,7 +56,7 @@ Compare the answer with the same SQL run in `psql`.
 ## Adding a filter
 
 Add one line to `FILTERS` in `server.py` (argument → column, operator), add the argument to
-`search_events` and `event_stats`, and add a test.
+`search_events`, `event_stats` and `chart`, and add a test.
 
 ## Dependencies
 
