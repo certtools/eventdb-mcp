@@ -1,11 +1,15 @@
 """Tests for settings loading and the click CLI."""
 
+import os
+import re
+
 import httpx2
 import openai
+import pytest
 from click.testing import CliRunner
 
 from eventdb_mcp import cli
-from eventdb_mcp.config import Settings
+from eventdb_mcp.config import ConfigError, Settings
 from tests.conftest import ROOT
 
 ENV_KEYS = [
@@ -28,8 +32,14 @@ ENV_KEYS = [
 
 def test_env_example_documents_every_setting():
     example = (ROOT / "env.example").read_text()
+    assert set(ENV_KEYS) == Settings.env_names()
     for key in ENV_KEYS:
         assert f"{key}=" in example, key
+
+
+def test_env_example_is_valid(monkeypatch):
+    _clean_env(monkeypatch)
+    assert Settings.from_env(ROOT / "env.example").db_table == "events"
 
 
 def test_settings_from_env_file(tmp_path, monkeypatch):
@@ -102,4 +112,65 @@ def test_ask_reports_llm_errors_cleanly(monkeypatch, tmp_path):
     result = _invoke(monkeypatch, tmp_path, "postgresql://x", "ask", "hello?")
     assert result.exit_code == 1
     assert "✗ LLM error" in result.output
+    assert "Traceback" not in result.output
+
+
+def _clean_env(monkeypatch):
+    for key in ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("EVENTDB_MAX_ROWS=abc", "EVENTDB_MAX_ROWS='abc'"),
+        ("EVENTDB_MAX_ROWS=0", "greater than 0"),
+        ("EVENTDB_ALLOW_SUPERUSER=maybe", "EVENTDB_ALLOW_SUPERUSER"),
+        ("MCP_TRANSPORT=sse", "MCP_TRANSPORT"),
+        ("MCP_PORT=70000", "MCP_PORT"),
+        ("LLM_BASE_URL=localhost:11434", "LLM_BASE_URL"),
+        ("LLM_TIMEOUT_S=soon", "LLM_TIMEOUT_S"),
+        ("LLM_MODLE=qwen", "Unknown variable(s)"),
+    ],
+)
+def test_invalid_env_values_are_rejected(tmp_path, monkeypatch, line, message):
+    _clean_env(monkeypatch)
+    env = tmp_path / ".env"
+    env.write_text(line + "\n")
+    with pytest.raises(ConfigError, match=re.escape(message)):
+        Settings.from_env(env)
+
+
+def test_all_errors_reported_at_once(tmp_path, monkeypatch):
+    _clean_env(monkeypatch)
+    env = tmp_path / ".env"
+    env.write_text("EVENTDB_MAX_ROWS=abc\nMCP_PORT=x\n")
+    with pytest.raises(ConfigError) as info:
+        Settings.from_env(env)
+    assert "EVENTDB_MAX_ROWS" in str(info.value) and "MCP_PORT" in str(info.value)
+
+
+def test_invalid_real_env_var_is_rejected(monkeypatch):
+    _clean_env(monkeypatch)
+    monkeypatch.setenv("LLM_MAX_STEPS", "-1")
+    with pytest.raises(ConfigError, match="LLM_MAX_STEPS"):
+        Settings.from_env(None)
+
+
+def test_other_env_file_vars_are_exported_for_libpq(tmp_path, monkeypatch):
+    _clean_env(monkeypatch)
+    monkeypatch.delenv("PGAPPNAME", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("PGAPPNAME=eventdb-mcp-test\n")
+    Settings.from_env(env)
+    assert os.environ.pop("PGAPPNAME") == "eventdb-mcp-test"
+
+
+def test_cli_reports_config_errors_without_traceback(monkeypatch, tmp_path):
+    _clean_env(monkeypatch)
+    env = tmp_path / ".env"
+    env.write_text("EVENTDB_MAX_ROWS=abc\n")
+    result = CliRunner().invoke(cli.main, ["--env-file", str(env), "check"])
+    assert result.exit_code == 2
+    assert "Invalid configuration" in result.output
     assert "Traceback" not in result.output

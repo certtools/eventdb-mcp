@@ -26,7 +26,12 @@ uv run eventdb-mcp ask "How many events per classification.taxonomy were there i
 uv run eventdb-mcp ask "Show the 10 newest phishing events with their URLs"
 uv run eventdb-mcp ask "Everything we know about 192.0.2.10 since 2026-01-01"
 uv run eventdb-mcp ask "Which ASNs in AT had the most infected systems in June 2026?"
+uv run eventdb-mcp ask "Plot events per day by classification.type in March 2026"
 ```
+
+Questions with "plot", "chart", "trend", "over time", "per day" or "per hour" go to the
+`chart` tool. A UI that knows the chart format (chat-ui) draws it; in `ask` the LLM
+describes it from each line's total and peak.
 
 ## Tools the LLM can use
 
@@ -36,6 +41,7 @@ uv run eventdb-mcp ask "Which ASNs in AT had the most infected systems in June 2
 | `describe_table` | Columns, SQL types and the IntelMQ description of each field |
 | `search_events` | Events matching filters (IP or CIDR, ASN, FQDN, country, classification, feed, malware, time range), newest first |
 | `event_stats` | Top-N counts grouped by any column |
+| `chart` | Events per hour or day (by `time.source`, UTC), one line per top value of a column such as `feed.name`, `classification.type` or `source.geolocation.cc`; same filters as `search_events` |
 | `run_sql` | Any other read-only `SELECT` |
 
 ## Limits you will notice
@@ -43,6 +49,11 @@ uv run eventdb-mcp ask "Which ASNs in AT had the most infected systems in June 2
 - Results are capped at `EVENTDB_MAX_ROWS` rows (default 200) per query. Ask for aggregates
   instead of raw rows when you need the big picture.
 - Queries are aborted after `EVENTDB_STATEMENT_TIMEOUT_MS` (default 30 s). Narrow the time range.
+- A chart has at most 1,000 points (lines x time buckets): 6 lines fit 166 days, 1 line
+  1,000 days; hourly buckets are used when they fit, else daily. Without a time range a
+  chart shows the 30 days up to the latest matching event. Charts can group only by
+  categorical columns (feed, classification, malware, ASN, country, protocol, port, severity,
+  TLP), not by IP or URL.
 - The LLM stops after `LLM_MAX_STEPS` tool calls (default 8) and says so.
 - **Verify important numbers.** Run `ask -v` to see the exact query, or check the audit log
   (`logs/eventdb-mcp.log`). LLMs can misread results. Totals the LLM computes itself

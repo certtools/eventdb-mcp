@@ -10,3 +10,4 @@ htmlcov/
 tmp/
 logs/*.log
 site/
+logs/evals/

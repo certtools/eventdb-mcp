@@ -2,64 +2,75 @@
 
 Every knob lives here so that ``env.example`` and this file are the single
 source of truth. Real environment variables win over values in ``.env``.
+
+Parsing is strict: a malformed value (``EVENTDB_MAX_ROWS=abc``) or an unknown
+variable with one of our prefixes in ``.env`` (typo such as ``LLM_MODLE``) is
+a :class:`ConfigError` that names every offending variable.
 """
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+PREFIXES = ("EVENTDB_", "MCP_", "LLM_")
 
 
-def _bool(value: str) -> bool:
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+class ConfigError(Exception):
+    """Invalid configuration. The message lists every problem."""
 
 
-@dataclass(frozen=True)
-class Settings:  # pylint: disable=too-many-instance-attributes
-    """All runtime settings. Build it with :meth:`from_env`."""
+class Settings(BaseModel):
+    """All runtime settings. Build it with :meth:`from_env`; field alias = env variable."""
 
-    # PostgreSQL / eventdb
-    db_dsn: str = ""  # empty -> libpq falls back to PGHOST, PGUSER, ... env vars
-    db_table: str = "events"
-    statement_timeout_ms: int = 30_000
-    max_rows: int = 200
-    allow_superuser: bool = False
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    # PostgreSQL / eventdb. Empty DSN -> libpq falls back to PGHOST, PGUSER, ... env vars.
+    db_dsn: str = Field("", alias="EVENTDB_DSN")
+    db_table: str = Field("events", alias="EVENTDB_TABLE", min_length=1)
+    statement_timeout_ms: int = Field(30_000, alias="EVENTDB_STATEMENT_TIMEOUT_MS", gt=0)
+    max_rows: int = Field(200, alias="EVENTDB_MAX_ROWS", gt=0, le=100_000)
+    allow_superuser: bool = Field(False, alias="EVENTDB_ALLOW_SUPERUSER")
 
     # FastMCP server
-    mcp_transport: str = "stdio"  # stdio | http
-    mcp_host: str = "127.0.0.1"
-    mcp_port: int = 8000
+    mcp_transport: Literal["stdio", "http"] = Field("stdio", alias="MCP_TRANSPORT")
+    mcp_host: str = Field("127.0.0.1", alias="MCP_HOST", min_length=1)
+    mcp_port: int = Field(8000, alias="MCP_PORT", gt=0, lt=65536)
 
     # OpenAI-compatible LLM (e.g. ollama, vLLM, llama.cpp, LM Studio)
-    llm_base_url: str = "http://localhost:11434/v1"
-    llm_api_key: str = "ollama"
-    llm_model: str = "qwen3.8:27b-mlx"
-    llm_max_steps: int = 8
-    llm_timeout_s: float = 300.0
+    llm_base_url: str = Field("http://localhost:11434/v1", alias="LLM_BASE_URL", pattern=r"^https?://")
+    llm_api_key: str = Field("ollama", alias="LLM_API_KEY")
+    llm_model: str = Field("qwen3.8:27b-mlx", alias="LLM_MODEL", min_length=1)
+    llm_max_steps: int = Field(8, alias="LLM_MAX_STEPS", gt=0, le=100)
+    llm_timeout_s: float = Field(300.0, alias="LLM_TIMEOUT_S", gt=0)
 
-    log_file: str = "logs/eventdb-mcp.log"
+    log_file: str = Field("logs/eventdb-mcp.log", alias="EVENTDB_MCP_LOG_FILE", min_length=1)
+
+    @classmethod
+    def env_names(cls) -> set[str]:
+        """All environment variable names we understand."""
+        return {f.alias for f in cls.model_fields.values() if f.alias}
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = ".env") -> Settings:
-        """Load ``env_file`` (if it exists) into ``os.environ``, then read settings."""
+        """Read ``env_file`` (if it exists) and the environment; raise :class:`ConfigError`."""
+        known = cls.env_names()
+        file_values: dict[str, str] = {}
         if env_file and Path(env_file).is_file():
-            load_dotenv(env_file, override=False)
-        env = os.environ.get
-        d = cls()  # defaults
-        return cls(
-            db_dsn=env("EVENTDB_DSN", d.db_dsn),
-            db_table=env("EVENTDB_TABLE", d.db_table),
-            statement_timeout_ms=int(env("EVENTDB_STATEMENT_TIMEOUT_MS", d.statement_timeout_ms)),
-            max_rows=int(env("EVENTDB_MAX_ROWS", d.max_rows)),
-            allow_superuser=_bool(env("EVENTDB_ALLOW_SUPERUSER", str(d.allow_superuser))),
-            mcp_transport=env("MCP_TRANSPORT", d.mcp_transport),
-            mcp_host=env("MCP_HOST", d.mcp_host),
-            mcp_port=int(env("MCP_PORT", d.mcp_port)),
-            llm_base_url=env("LLM_BASE_URL", d.llm_base_url),
-            llm_api_key=env("LLM_API_KEY", d.llm_api_key),
-            llm_model=env("LLM_MODEL", d.llm_model),
-            llm_max_steps=int(env("LLM_MAX_STEPS", d.llm_max_steps)),
-            llm_timeout_s=float(env("LLM_TIMEOUT_S", d.llm_timeout_s)),
-            log_file=env("EVENTDB_MCP_LOG_FILE", d.log_file),
-        )
+            file_values = {k: v or "" for k, v in dotenv_values(env_file).items()}
+        unknown = sorted(k for k in file_values if k.startswith(PREFIXES) and k not in known)
+        if unknown:
+            raise ConfigError(f"Unknown variable(s) in {env_file}: {', '.join(unknown)} (typo?)")
+        values = {k: v for k, v in file_values.items() if k in known}
+        values |= {k: os.environ[k] for k in known if k in os.environ}  # real env wins
+        try:
+            settings = cls.model_validate(values)
+        except ValidationError as exc:
+            problems = [f"{err['loc'][0]}={err.get('input')!r}: {err['msg']}" for err in exc.errors()]
+            raise ConfigError("Invalid configuration:\n  " + "\n  ".join(problems)) from None
+        for key, value in file_values.items():  # export other vars, e.g. PGPASSWORD, for libpq
+            if key not in known:
+                os.environ.setdefault(key, value)
+        return settings

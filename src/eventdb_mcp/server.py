@@ -6,20 +6,23 @@ Tools:
 * ``describe_table``  - columns of a table, with IntelMQ field descriptions
 * ``search_events``   - structured search (safe, index-friendly, no SQL needed)
 * ``event_stats``     - "top N" counts grouped by one column
+* ``chart``           - events per hour/day, one line per top value (a chart the UI draws)
 * ``run_sql``         - free-form read-only SELECT for everything else
 """
 
+import html
 import json
+from datetime import timedelta
 from functools import cache
 from importlib import resources
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from psycopg import sql
 from pydantic import Field
 
-from eventdb_mcp import db
+from eventdb_mcp import charts, db
 from eventdb_mcp.config import Settings
 
 INSTRUCTIONS = """\
@@ -33,7 +36,8 @@ the feed; "time.observation" is when IntelMQ saw it. Both are indexed, as are
 time (e.g. "time.source" >= now() - interval '7 days') and use LIMIT.
 Never add up COUNT(DISTINCT ...) values of several groups to get a total
 (the same IP can appear in many groups); query the total directly.
-Prefer search_events / event_stats; use run_sql for anything else.
+Prefer search_events / event_stats; use chart for plots and trends over time;
+use run_sql for anything else.
 """
 
 # Columns returned by search_events (the full "raw" payload is left out on purpose).
@@ -217,6 +221,99 @@ def create_server(settings: Settings) -> FastMCP:
             + sql.SQL(" GROUP BY 1 ORDER BY 2 DESC LIMIT %s")
         )
         return run(query, [*params, limit])
+
+    def chart_window(since: str | None, until: str | None, filters: dict) -> dict:
+        """``{start, end, window}``; until defaults to the day after the latest matching event."""
+        latest = None
+        if until is None:
+            where, params = build_where(filters)
+            latest_sql = sql.SQL('SELECT max("time.source") AS latest FROM {}').format(table) + where
+            latest = run(latest_sql, params)["rows"][0]["latest"]
+            if latest is None:
+                raise ToolError("No events match these filters.")
+        end = charts.parse_time("until", until or latest)
+        end = end if until else charts.floor(end, "day") + timedelta(days=1)
+        start = charts.parse_time("since", since) if since else end - timedelta(days=charts.DEFAULT_DAYS)
+        if start >= end and latest:
+            raise ToolError(f"No events since {start}: the latest matching event is from {latest}.")
+        if start >= end:
+            raise ToolError(f"since must be before until (since {start}, until {end}).")
+        window = {"since": start.isoformat(), "until": end.isoformat(), "time_zone": "UTC"}
+        defaults = [f"until = the day after the latest matching event ({latest})"] if latest else []
+        defaults += [f"since = {charts.DEFAULT_DAYS} days before until"] if since is None else []
+        if defaults:
+            window["note"] = "Defaults: " + "; ".join(defaults) + "."
+        return {"start": start, "end": end, "window": window}
+
+    @mcp.tool(annotations={"readOnlyHint": True})
+    def chart(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
+        group_by: Annotated[
+            str | None,
+            Field(
+                description="One line per top value of this column: feed.name, classification.taxonomy,"
+                " classification.type, classification.identifier, malware.name, source.asn,"
+                " source.geolocation.cc, ... (see the error for the full list); leave out for one total line"
+            ),
+        ] = None,
+        *,
+        bucket: Annotated[
+            Literal["10min", "hour", "day"] | None,
+            Field(description="Time bucket (UTC); leave out for hour, or day when hours do not fit"),
+        ] = None,
+        series: Annotated[int, Field(ge=1, le=10, description="Number of lines (top values)")] = 6,
+        y_scale: Annotated[
+            Literal["linear", "log"], Field(description="'log' when the lines differ by orders of magnitude")
+        ] = "linear",
+        title: Annotated[str | None, Field(max_length=120, description="Chart title; default: built")] = None,
+        source_ip: Ip = None,
+        source_asn: Asn = None,
+        source_fqdn: Fqdn = None,
+        source_cc: Cc = None,
+        classification_taxonomy: Taxonomy = None,
+        classification_type: CType = None,
+        classification_identifier: Ident = None,
+        feed_name: Feed = None,
+        malware_name: Malware = None,
+        since: Since = None,
+        until: Until = None,
+    ) -> dict:
+        """Data for a line chart that the user's UI draws: events per time bucket (time.source, UTC).
+
+        Use it when the user asks for a plot, chart, graph, trend, timeline, or "over time" /
+        "per hour" / "per day". One line per top value of group_by (most events first), or one
+        "all" line. Without since/until: the 30 days up to the latest matching event. At most
+        1,000 points (series x buckets). Each line has total, peak and peak_at: describe the
+        chart in 2-3 sentences from those, do not read or list the values.
+        """
+        filters = {k: v for k, v in locals().items() if k in FILTERS and k not in ("since", "until")}
+        charts.line_sql(table, group_by, sql.SQL(""))  # refuse a bad group_by before any query
+        used = chart_window(since, until, filters)
+        lines = series if group_by else 1  # without group_by there is one "all" line
+        bucket, labels = charts.pick_bucket(used["start"], used["end"], bucket, lines)
+        where, params = build_where(filters | {"since": used["start"], "until": used["end"]})
+        seconds = int(charts.BUCKETS[bucket].total_seconds())
+        query = charts.line_sql(table, group_by, where)
+        rows = run(query, [seconds, seconds, *params, series], max_rows=charts.MAX_POINTS)
+        if not rows["rows"]:
+            raise ToolError(f"No events match these filters between {used['start']} and {used['end']}.")
+        shown = ", ".join(f"{FILTERS[k][0]}={v}" for k, v in filters.items() if v is not None)
+        default_title = (
+            f"Events per {bucket}{f' by {group_by}' if group_by else ''}{f' ({shown})' if shown else ''}"
+        )
+        spec = {
+            "type": "line",
+            # LLMs sometimes write "&lt;1024": the UI shows titles as plain text.
+            "title": html.unescape(title) if title else default_title,
+            "x": {
+                "label": f"Time (UTC), per {bucket}",
+                "start": labels[0],
+                "step": bucket,
+                "count": len(labels),
+            },
+            "y": {"label": f"events per {bucket}", "scale": y_scale},
+            "series": charts.line_series(rows["rows"], labels),
+        }
+        return {"chart": spec, "window": used["window"]}
 
     @mcp.tool(annotations={"readOnlyHint": True})
     def run_sql(

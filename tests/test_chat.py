@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from dataclasses import replace
 from types import SimpleNamespace
 
 from openai.types.chat import ChatCompletion
@@ -94,7 +93,7 @@ def test_long_results_are_truncated(settings, monkeypatch):
 
 
 def test_step_limit_gives_deterministic_answer(settings):
-    s = replace(settings, llm_max_steps=2)
+    s = settings.model_copy(update={"llm_max_steps": 2})
     loop = completion(tool_calls=[("list_tables", "")])
     answer, calls = run_ask(s, FakeLLM(loop, loop))
     assert "No final answer after 2" in answer

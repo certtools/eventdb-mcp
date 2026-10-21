@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "pydantic>=2.12",
     "click>=8.5.0",
     "fastmcp==4.1.0",
     "openai>=3.32.0",
@@ -37,7 +38,11 @@ eventdb-mcp = "eventdb_mcp.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--basetemp=tmp/pytest --cov=eventdb_mcp --cov-report=term-missing"
+addopts = "--basetemp=tmp/pytest --cov=eventdb_mcp --cov=evals --cov-branch --cov-report=term-missing --cov-fail-under=95"
+markers = [
+    "e2e: runs the real CLI in subprocesses (stdio, HTTP, ask, check)",
+    "llm_eval: golden-question eval against a real LLM (opt-in: LLM_EVAL=1)",
+]
 
 [tool.ruff]
 line-length = 110
@@ -47,6 +52,8 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S608"]
+# Constant data tables (one row per feed / question) and reference SQL built from module constants only.
+"evals/{dataset,questions}.py" = ["E501", "S608"]
 
 [tool.pylint.format]
 max-line-length = 110

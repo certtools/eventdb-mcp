@@ -8,3 +8,5 @@ nav:
   - Developer guide: DEVELOPER.md
   - Architecture: ARCHITECTURE.md
   - Data flow: DATAFLOW.md
+  - Testing: TESTING.md
+  - Evals: EVALS.md

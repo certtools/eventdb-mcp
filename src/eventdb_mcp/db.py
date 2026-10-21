@@ -18,6 +18,7 @@ Use a dedicated role with ``SELECT`` only (see docs/ADMIN_GUIDE.md).
 import json
 import logging
 import re
+from decimal import Decimal
 from typing import Any
 
 import psycopg
@@ -55,7 +56,8 @@ def run_query(settings: Settings, query: Any, params: Any = None, max_rows: int 
     max_rows = max_rows or settings.max_rows
     if isinstance(query, str):
         query = check_sql(query)
-    options = f"-c statement_timeout={settings.statement_timeout_ms}"
+    # UTC: timestamps look the same wherever the server runs (and match the LLM prompt).
+    options = f"-c statement_timeout={settings.statement_timeout_ms} -c TimeZone=UTC"
     try:
         with psycopg.connect(settings.db_dsn, options=options, connect_timeout=10) as conn:
             conn.read_only = True
@@ -79,9 +81,15 @@ def run_query(settings: Settings, query: Any, params: Any = None, max_rows: int 
 
     truncated = len(rows) > max_rows
     rows = rows[:max_rows]
-    # default=str turns datetime, inet, Decimal, ... into plain strings.
-    records = json.loads(json.dumps([dict(zip(columns, r, strict=True)) for r in rows], default=str))
+    records = json.loads(json.dumps([dict(zip(columns, r, strict=True)) for r in rows], default=_to_json))
     return {"columns": columns, "rows": records, "row_count": len(records), "truncated": truncated}
+
+
+def _to_json(value: Any) -> Any:
+    """JSON fallback: numeric (e.g. ``avg()``) -> number; datetime, inet, ... -> string."""
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    return str(value)
 
 
 def _as_text(query: Any, conn: psycopg.Connection) -> str:

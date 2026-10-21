@@ -12,7 +12,7 @@ from rich.markdown import Markdown
 
 from eventdb_mcp import db
 from eventdb_mcp.chat import ask as ask_llm
-from eventdb_mcp.config import Settings
+from eventdb_mcp.config import ConfigError, Settings
 from eventdb_mcp.server import create_server
 
 # stderr only: with the stdio transport, stdout belongs to the MCP protocol.
@@ -20,7 +20,11 @@ console = Console(stderr=True)
 
 
 def _setup(env_file: str) -> Settings:
-    settings = Settings.from_env(env_file)
+    try:
+        settings = Settings.from_env(env_file)
+    except ConfigError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        raise SystemExit(2) from exc
     Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(settings.log_file)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
